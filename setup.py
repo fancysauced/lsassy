@@ -6,43 +6,36 @@
 
 import pathlib
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 HERE = pathlib.Path(__file__).parent
 README = (HERE / "README.md").read_text()
 
 setup(
     name="lsassy",
-    version="3.1.1",
+    version="3.1.16",
     author="Pixis",
     author_email="hackndo@gmail.com",
     description="Python library to extract credentials from lsass remotely",
     long_description=README,
     long_description_content_type="text/markdown",
-    packages=find_packages(exclude=["assets"]),
+    packages=find_packages(exclude=["assets", "tests*"]),
     include_package_data=True,
     url="https://github.com/Hackndo/lsassy/",
-    zip_safe = True,
+    zip_safe=True,
     license="MIT",
-    install_requires=[
-        'impacket',
-        'netaddr',
-        'pypykatz>=0.4.8',
-        'rich'
-    ],
-    python_requires='>=3.6',
+    install_requires=["impacket", "netaddr", "pypykatz>=0.6.3", "rich"],
+    python_requires=">=3.6",
     classifiers=(
-        "Programming Language :: Python :: 3.6",
-        "Programming Language :: Python :: 3.7",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ),
     entry_points={
-        'console_scripts': [
-            'lsassy = lsassy.console:main',
+        "console_scripts": [
+            "lsassy = lsassy.console:main",
         ],
     },
-    test_suite='tests.tests'
+    test_suite="tests.test_lsassy",
 )

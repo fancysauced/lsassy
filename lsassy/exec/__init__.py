@@ -1,10 +1,11 @@
-import logging
+from lsassy.logger import lsassy_logger
 
 
 class IExec:
     """
     Interface for remote execution
     """
+
     debug_privilege = False
     kerberos_support = True
 
@@ -16,8 +17,12 @@ class IExec:
         To be implemented in all exec modules
         :param command: Command to be executed on remote host
         """
-        logging.info("Executing using {}".format(self.__module__))
+        lsassy_logger.info("Executing using {}".format(self.__module__))
         if not self.kerberos_support and self.session.kerberos is True:
-            logging.error("Module {} does not support Kerberos authentication".format(self.__module__))
+            lsassy_logger.error(
+                "Module {} does not support Kerberos authentication".format(
+                    self.__module__
+                )
+            )
             return False
         return True

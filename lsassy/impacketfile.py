@@ -1,7 +1,8 @@
-import logging
 import time
 
 from impacket.smb3structs import *
+
+from lsassy.logger import lsassy_logger
 
 
 class ImpacketFile:
@@ -16,6 +17,7 @@ class ImpacketFile:
     - seek
     - tell
     """
+
     def __init__(self, session):
         self._session = session
         self._share_name = None
@@ -30,11 +32,7 @@ class ImpacketFile:
         self._opened = False
 
         self._buffer_min_size = 1024 * 8
-        self._buffer_data = {
-            "offset": 0,
-            "size": 0,
-            "buffer": ""
-        }
+        self._buffer_data = {"offset": 0, "size": 0, "buffer": ""}
 
     def get_connection(self):
         """
@@ -46,8 +44,10 @@ class ImpacketFile:
     def _open_share(self):
         try:
             self._tid = self._session.smb_session.connectTree(self._share_name)
-        except Exception as e:
-            logging.warning("ConnectTree error with '{}'".format(self._share_name), exc_info=True)
+        except Exception:
+            lsassy_logger.warning(
+                "ConnectTree error with '{}'".format(self._share_name), exc_info=True
+            )
             return None
         return self
 
@@ -56,31 +56,45 @@ class ImpacketFile:
         path = path.replace("\\", "/")
         try:
             share, fpath = share, path + "/" + file
-        except Exception as e:
-            logging.warning("Parsing error with '{}'".format(path), exc_info=True)
+        except Exception:
+            lsassy_logger.warning("Parsing error with '{}'".format(path), exc_info=True)
             return None
         try:
             tid = session.smb_session.connectTree(share)
-        except Exception as e:
-            logging.warning("ConnectTree error with '{}'".format(share), exc_info=True)
+        except Exception:
+            lsassy_logger.warning(
+                "ConnectTree error with '{}'".format(share), exc_info=True
+            )
             return None
 
         fid = None
 
         try:
-            fid = session.smb_session._SMBConnection.create(tid, fpath, FILE_WRITE_DATA, FILE_SHARE_WRITE, FILE_NON_DIRECTORY_FILE, FILE_OVERWRITE_IF, 0)
+            fid = session.smb_session._SMBConnection.create(
+                tid,
+                fpath,
+                FILE_WRITE_DATA,
+                FILE_SHARE_WRITE,
+                FILE_NON_DIRECTORY_FILE,
+                FILE_OVERWRITE_IF,
+                0,
+            )
             finished = False
-            MAX_FILE_WRITE = session.smb_session._SMBConnection._Connection['MaxWriteSize']
+            MAX_FILE_WRITE = session.smb_session._SMBConnection._Connection[
+                "MaxWriteSize"
+            ]
             rnd = 0
             while not finished:
-                data = content[rnd*MAX_FILE_WRITE:(rnd+1)*MAX_FILE_WRITE]
+                data = content[rnd * MAX_FILE_WRITE : (rnd + 1) * MAX_FILE_WRITE]
                 if len(data) == 0:
                     break
-                session.smb_session._SMBConnection.write(tid, fid, data, rnd*MAX_FILE_WRITE, len(data))
+                session.smb_session._SMBConnection.write(
+                    tid, fid, data, rnd * MAX_FILE_WRITE, len(data)
+                )
                 rnd += 1
         finally:
             if fid is not None:
-                logging.debug("File {}{} created!".format(share, fpath))
+                lsassy_logger.debug("File {}{} created!".format(share, fpath))
                 session.smb_session._SMBConnection.close(tid, fid)
                 session.smb_session._SMBConnection.disconnectTree(tid)
                 return True
@@ -94,23 +108,37 @@ class ImpacketFile:
         while True:
             try:
                 session.smb_session.deleteFile("C$", file_path)
-                logging.debug("File {}{} deleted".format("C$", file_path))
+                lsassy_logger.debug("File {}{} deleted".format("C$", file_path))
                 return True
             except BrokenPipeError:
                 if time.time() - t > timeout:
-                    logging.warning("File wasn't removed `{}{}`, connection lost".format("C$", file_path),
-                                    exc_info=True)
+                    lsassy_logger.warning(
+                        "File wasn't removed `{}{}`, connection lost".format(
+                            "C$", file_path
+                        ),
+                        exc_info=True,
+                    )
                     return None
-                logging.debug("Trying to reconnect ...")
+                lsassy_logger.debug("Trying to reconnect ...")
                 if session.login():
-                    logging.success("Reconnected after unexpected disconnection for proper cleanup")
+                    print(
+                        "Reconnected after unexpected disconnection for proper cleanup"
+                    )
             except Exception as e:
-                if "STATUS_OBJECT_NAME_NOT_FOUND" in str(e) or "STATUS_NO_SUCH_FILE" in str(e):
+                if "STATUS_OBJECT_NAME_NOT_FOUND" in str(
+                    e
+                ) or "STATUS_NO_SUCH_FILE" in str(e):
+                    lsassy_logger.debug(f"Object or File not found for deletion: {e}")
                     return True
                 if time.time() - t > timeout:
-                    logging.warning("File wasn't removed `{}{}`".format("C$", file_path), exc_info=True)
+                    lsassy_logger.warning(
+                        "File wasn't removed `{}{}`".format("C$", file_path),
+                        exc_info=True,
+                    )
                     return None
-                logging.debug("Unable to delete file `{}{}`. Retrying...".format("C$", file_path))
+                lsassy_logger.debug(
+                    "Unable to delete file `{}{}`. Retrying...".format("C$", file_path)
+                )
                 time.sleep(0.5)
 
     def open(self, share, path, file, timeout=3):
@@ -125,8 +153,8 @@ class ImpacketFile:
         path = path.replace("\\", "/")
         try:
             self._share_name, self._fpath = share, path + "/" + file
-        except Exception as e:
-            logging.warning("Parsing error with '{}'".format(path), exc_info=True)
+        except Exception:
+            lsassy_logger.warning("Parsing error with '{}'".format(path), exc_info=True)
             return None
 
         if self._open_share() is None:
@@ -135,14 +163,21 @@ class ImpacketFile:
         t = time.time()
         while True:
             try:
-                self._fid = self._session.smb_session.openFile(self._tid, self._fpath)
-                logging.info("{} handle acquired".format(self._fpath))
+                self._fid = self._session.smb_session.openFile(
+                    self._tid, self._fpath, desiredAccess=FILE_READ_DATA
+                )
+                lsassy_logger.info("{} handle acquired".format(self._fpath))
                 break
-            except Exception as e:
+            except Exception:
                 if time.time() - t > timeout:
-                    logging.warning("Unable to open remote file {}".format( self._fpath), exc_info=True)
+                    lsassy_logger.warning(
+                        "Unable to open remote file {}".format(self._fpath),
+                        exc_info=True,
+                    )
                     return None
-                logging.debug("Unable to open remote file {}. Retrying...".format(self._fpath))
+                lsassy_logger.debug(
+                    "Unable to open remote file {}. Retrying...".format(self._fpath)
+                )
                 time.sleep(0.5)
 
         self._fileInfo = self._session.smb_session.queryInfo(self._tid, self._fid)
@@ -159,14 +194,20 @@ class ImpacketFile:
         :return: Buffer containing file's content
         """
         if size == 0:
-            return b''
+            return b""
 
-        if (self._buffer_data["offset"] <= self._currentOffset <= self._buffer_data["offset"] + self._buffer_data[
-            "size"]
-                and self._buffer_data["offset"] + self._buffer_data["size"] > self._currentOffset + size):
+        if (
+            self._buffer_data["offset"]
+            <= self._currentOffset
+            <= self._buffer_data["offset"] + self._buffer_data["size"]
+            and self._buffer_data["offset"] + self._buffer_data["size"]
+            > self._currentOffset + size
+        ):
             value = self._buffer_data["buffer"][
-                    self._currentOffset - self._buffer_data["offset"]:self._currentOffset - self._buffer_data[
-                        "offset"] + size]
+                self._currentOffset - self._buffer_data["offset"] : self._currentOffset
+                - self._buffer_data["offset"]
+                + size
+            ]
         else:
             self._buffer_data["offset"] = self._currentOffset
 
@@ -174,14 +215,29 @@ class ImpacketFile:
             If data size is too small, read self._buffer_min_size bytes and cache them
             """
             if size < self._buffer_min_size:
-                value = self._session.smb_session.readFile(self._tid, self._fid, self._currentOffset, self._buffer_min_size)
+                value = self._session.smb_session.readFile(
+                    self._tid, self._fid, self._currentOffset, self._buffer_min_size
+                )
                 self._buffer_data["size"] = self._buffer_min_size
                 self._total_read += self._buffer_min_size
 
             else:
-                value = self._session.smb_session.readFile(self._tid, self._fid, self._currentOffset, size + self._buffer_min_size)
-                while len(value) < size+self._buffer_min_size and self._currentOffset + len(value) < self._endOfFile:
-                    value += self._session.smb_session.readFile(self._tid, self._fid, self._currentOffset + len(value), size + self._buffer_min_size - len(value))
+                value = self._session.smb_session.readFile(
+                    self._tid,
+                    self._fid,
+                    self._currentOffset,
+                    size + self._buffer_min_size,
+                )
+                while (
+                    len(value) < size + self._buffer_min_size
+                    and self._currentOffset + len(value) < self._endOfFile
+                ):
+                    value += self._session.smb_session.readFile(
+                        self._tid,
+                        self._fid,
+                        self._currentOffset + len(value),
+                        size + self._buffer_min_size - len(value),
+                    )
                 self._buffer_data["size"] = size + self._buffer_min_size
                 self._total_read += size
 
@@ -213,7 +269,7 @@ class ImpacketFile:
         elif whence == 2:
             self._currentOffset = self._endOfFile - offset
         else:
-            raise Exception('Seek function whence value must be between 0-2')
+            raise Exception("Seek function whence value must be between 0-2")
 
     def tell(self):
         """
